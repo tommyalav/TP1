@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CloudTask v1.1</title>
+    <title>CloudTask v1.2</title>
     <style>
         * {
             box-sizing: border-box;
@@ -490,70 +490,97 @@
     <main class="app">
         <header class="header">
             <h1>☁ CloudTask</h1>
-            <p>Gestor de tareas interactivo</p><span class="version">Versión 1.1</span>
+            <p>Gestor de tareas interactivo</p><span class="version">Versión 1.2</span>
         </header>
         <section class="content">
-            <form id="taskForm" class="input-group v11-input">
+            <form id="taskForm" class="input-group v12-input">
                 <input id="taskInput" type="text" maxlength="160" placeholder="Escribe una nueva tarea..."
-                    aria-label="Nueva tarea" required>
+                    aria-label="Nombre de la tarea" required>
                 <select id="prioritySelect" aria-label="Prioridad">
                     <option value="baja">Prioridad baja</option>
                     <option value="media" selected>Prioridad media</option>
                     <option value="alta">Prioridad alta</option>
                 </select>
+                <input id="dueDateInput" type="date" aria-label="Fecha límite">
                 <button id="addTaskBtn" class="primary-btn" type="submit">Agregar</button>
             </form>
+            <div class="input-group v12-input" style="grid-template-columns:minmax(180px,1fr) 180px">
+                <input id="searchInput" type="text" placeholder="Buscar tareas..." aria-label="Buscar tareas">
+                <select id="sortSelect" aria-label="Ordenar tareas">
+                    <option value="default">Orden original</option>
+                    <option value="priority">Por prioridad</option>
+                    <option value="date">Por fecha límite</option>
+                </select>
+            </div>
             <div class="toolbar">
-                <div class="filters" aria-label="Filtros de tareas">
-                    <button class="filter-btn active" type="button" data-filter="all">Todas</button><button
-                        class="filter-btn" type="button" data-filter="pending">Pendientes</button><button
-                        class="filter-btn" type="button" data-filter="completed">Completadas</button>
-                </div><button id="clearCompletedBtn" class="clear-btn" type="button">Eliminar completadas</button>
+                <div class="filters" aria-label="Filtros de tareas"><button class="filter-btn active" type="button"
+                        data-filter="all">Todas</button><button class="filter-btn" type="button"
+                        data-filter="pending">Pendientes</button><button class="filter-btn" type="button"
+                        data-filter="completed">Completadas</button></div><button id="clearCompletedBtn"
+                    class="clear-btn" type="button">Eliminar completadas</button>
             </div>
             <ul id="taskList" class="task-list" aria-live="polite"></ul>
-            <div class="summary two">
-                <div class="summary-card">Total de tareas<strong id="totalCount">0</strong></div>
-                <div class="summary-card">Tareas pendientes<strong id="pendingCount">0</strong></div>
+            <div class="summary three">
+                <div class="summary-card">Total<strong id="totalCount">0</strong></div>
+                <div class="summary-card">Pendientes<strong id="pendingCount">0</strong></div>
+                <div class="summary-card">Vencidas<strong id="overdueCount">0</strong></div>
             </div>
         </section>
-        <footer>CloudTask v1.1 · GitHub + Vercel / Netlify<br><span class="student">Estudiante: Julio Tommy Álava
+        <footer>CloudTask v1.2 · GitHub + Vercel / Netlify<br><span class="student">Estudiante: Julio Tommy Álava
                 Rodríguez</span></footer>
     </main>
     <script>
         const STORAGE_KEY = "cloudTaskTasks";
-        const taskInput = document.getElementById("taskInput"), prioritySelect = document.getElementById("prioritySelect"), taskForm = document.getElementById("taskForm"), taskList = document.getElementById("taskList");
-        const totalCount = document.getElementById("totalCount"), pendingCount = document.getElementById("pendingCount"), filterButtons = [...document.querySelectorAll(".filter-btn")];
-        let currentFilter = "all";
+        const taskInput = document.getElementById("taskInput"), prioritySelect = document.getElementById("prioritySelect"), dueDateInput = document.getElementById("dueDateInput"), taskForm = document.getElementById("taskForm"), taskList = document.getElementById("taskList");
+        const totalCount = document.getElementById("totalCount"), pendingCount = document.getElementById("pendingCount"), overdueCount = document.getElementById("overdueCount"), searchInput = document.getElementById("searchInput"), sortSelect = document.getElementById("sortSelect"), addTaskBtn = document.getElementById("addTaskBtn"), filterButtons = [...document.querySelectorAll(".filter-btn")];
+        let currentFilter = "all", editingId = null;
         const defaults = [
-            { id: 1, text: "Subir proyecto a GitHub", completed: false, priority: "alta" },
-            { id: 2, text: "Desplegar aplicación en Vercel", completed: false, priority: "media" },
-            { id: 3, text: "Probar aplicación desde el teléfono", completed: true, priority: "baja" }];
-        function loadTasks() { try { const saved = localStorage.getItem(STORAGE_KEY); if (saved === null) return defaults; const parsed = JSON.parse(saved); if (!Array.isArray(parsed)) return defaults; return parsed.filter(t => t && typeof t.text === "string").map((t, i) => ({ id: Number.isFinite(t.id) ? t.id : Date.now() + i, text: t.text, completed: Boolean(t.completed), priority: ["baja", "media", "alta"].includes(t.priority) ? t.priority : "media" })); } catch (error) { return defaults; } }
+            { id: 1, text: "Subir proyecto a GitHub", completed: false, priority: "alta", dueDate: "" },
+            { id: 2, text: "Desplegar aplicación en Vercel", completed: false, priority: "media", dueDate: "" },
+            { id: 3, text: "Probar aplicación desde el teléfono", completed: true, priority: "baja", dueDate: "" }];
+        function loadTasks() { try { const saved = localStorage.getItem(STORAGE_KEY); if (saved === null) return defaults; const parsed = JSON.parse(saved); if (!Array.isArray(parsed)) return defaults; return parsed.filter(t => t && typeof t.text === "string").map((t, i) => ({ id: Number.isFinite(t.id) ? t.id : Date.now() + i, text: t.text, completed: Boolean(t.completed), priority: ["baja", "media", "alta"].includes(t.priority) ? t.priority : "media", dueDate: typeof t.dueDate === "string" ? t.dueDate : "" })); } catch (error) { return defaults; } }
         let tasks = loadTasks();
         function saveTasks() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch (error) { console.warn("No se pudieron guardar las tareas en este navegador.", error); } }
+        function isOverdue(task) { if (!task.dueDate || task.completed) return false; const today = new Date(); today.setHours(0, 0, 0, 0); const due = new Date(task.dueDate + "T00:00:00"); return !Number.isNaN(due.getTime()) && due < today; }
         function renderTasks() {
-            taskList.replaceChildren();
-            const visible = tasks.filter(t => currentFilter === "all" || (currentFilter === "pending" && !t.completed) || (currentFilter === "completed" && t.completed));
+            taskList.replaceChildren(); let visible = [...tasks];
+            if (currentFilter === "pending") visible = visible.filter(t => !t.completed); if (currentFilter === "completed") visible = visible.filter(t => t.completed);
+            const query = searchInput.value.trim().toLocaleLowerCase("es"); if (query) visible = visible.filter(t => t.text.toLocaleLowerCase("es").includes(query));
+            const priorityOrder = { alta: 1, media: 2, baja: 3 };
+            if (sortSelect.value === "priority") visible.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+            if (sortSelect.value === "date") visible.sort((a, b) => { if (!a.dueDate && !b.dueDate) return 0; if (!a.dueDate) return 1; if (!b.dueDate) return -1; return a.dueDate.localeCompare(b.dueDate); });
             if (!visible.length) { const empty = document.createElement("li"); empty.className = "empty"; empty.textContent = "No hay tareas para mostrar"; taskList.append(empty); }
-            const priorityLabels = { baja: "Baja", media: "Media", alta: "Alta" };
+            const labels = { baja: "Baja", media: "Media", alta: "Alta" };
             visible.forEach(task => {
-                const li = document.createElement("li"); li.className = "task" + (task.completed ? " completed" : "");
+                const li = document.createElement("li"); li.className = "task" + (task.completed ? " completed" : "") + (isOverdue(task) ? " overdue" : "");
                 const left = document.createElement("div"); left.className = "task-left";
                 const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.checked = task.completed; checkbox.setAttribute("aria-label", "Marcar tarea como completada"); checkbox.addEventListener("change", () => toggleTask(task.id));
                 const info = document.createElement("div"); info.className = "task-info";
                 const text = document.createElement("span"); text.className = "task-text"; text.textContent = task.text;
-                const priority = document.createElement("span"); priority.className = "priority priority-" + task.priority; priority.textContent = "Prioridad " + priorityLabels[task.priority];
-                info.append(text, priority); left.append(checkbox, info);
+                const meta = document.createElement("div"); meta.className = "meta";
+                const priority = document.createElement("span"); priority.className = "priority priority-" + task.priority; priority.textContent = "Prioridad " + labels[task.priority]; meta.append(priority);
+                if (task.dueDate) { const date = document.createElement("span"); date.className = "date-badge"; date.textContent = "Fecha: " + task.dueDate; meta.append(date); }
+                if (isOverdue(task)) { const overdue = document.createElement("span"); overdue.className = "overdue-badge"; overdue.textContent = "Vencida"; meta.append(overdue); }
+                info.append(text, meta); left.append(checkbox, info);
+                const actions = document.createElement("div"); actions.className = "actions";
+                const edit = document.createElement("button"); edit.type = "button"; edit.className = "edit-btn"; edit.textContent = "Editar"; edit.addEventListener("click", () => editTask(task.id));
                 const del = document.createElement("button"); del.type = "button"; del.className = "delete-btn"; del.textContent = "Eliminar"; del.addEventListener("click", () => deleteTask(task.id));
-                li.append(left, del); taskList.append(li);
+                actions.append(edit, del); li.append(left, actions); taskList.append(li);
             });
-            totalCount.textContent = tasks.length; pendingCount.textContent = tasks.filter(t => !t.completed).length; saveTasks();
+            totalCount.textContent = tasks.length; pendingCount.textContent = tasks.filter(t => !t.completed).length; overdueCount.textContent = tasks.filter(isOverdue).length; saveTasks();
         }
-        function addTask(event) { event.preventDefault(); const text = taskInput.value.trim(); if (!text) { alert("Escribe una tarea."); return; } tasks.push({ id: Date.now(), text, completed: false, priority: prioritySelect.value }); taskInput.value = ""; prioritySelect.value = "media"; renderTasks(); taskInput.focus(); }
+        function resetForm() { taskInput.value = ""; prioritySelect.value = "media"; dueDateInput.value = ""; editingId = null; addTaskBtn.textContent = "Agregar"; }
+        function addOrUpdateTask(event) {
+            event.preventDefault(); const text = taskInput.value.trim(); if (!text) { alert("Escribe una tarea."); return; } const priority = prioritySelect.value, dueDate = dueDateInput.value;
+            if (editingId !== null) { tasks = tasks.map(t => t.id === editingId ? { ...t, text, priority, dueDate } : t); } else { tasks.push({ id: Date.now(), text, completed: false, priority, dueDate }); }
+            resetForm(); renderTasks(); taskInput.focus();
+        }
+        function editTask(id) { const task = tasks.find(t => t.id === id); if (!task) return; taskInput.value = task.text; prioritySelect.value = task.priority; dueDateInput.value = task.dueDate || ""; editingId = id; addTaskBtn.textContent = "Guardar"; taskInput.focus(); }
         function toggleTask(id) { tasks = tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t); renderTasks(); }
-        function deleteTask(id) { tasks = tasks.filter(t => t.id !== id); renderTasks(); }
-        function clearCompletedTasks() { if (!tasks.some(t => t.completed)) { alert("No hay tareas completadas."); return; } if (confirm("¿Eliminar todas las tareas completadas?")) { tasks = tasks.filter(t => !t.completed); renderTasks(); } }
-        taskForm.addEventListener("submit", addTask); document.getElementById("clearCompletedBtn").addEventListener("click", clearCompletedTasks);
+        function deleteTask(id) { tasks = tasks.filter(t => t.id !== id); if (editingId === id) resetForm(); renderTasks(); }
+        function clearCompletedTasks() { if (!tasks.some(t => t.completed)) { alert("No hay tareas completadas."); return; } if (confirm("¿Eliminar todas las tareas completadas?")) { tasks = tasks.filter(t => !t.completed); if (editingId !== null && !tasks.some(t => t.id === editingId)) resetForm(); renderTasks(); } }
+        taskForm.addEventListener("submit", addOrUpdateTask); document.getElementById("clearCompletedBtn").addEventListener("click", clearCompletedTasks);
+        searchInput.addEventListener("input", renderTasks); sortSelect.addEventListener("change", renderTasks);
         filterButtons.forEach(button => button.addEventListener("click", () => { filterButtons.forEach(b => b.classList.toggle("active", b === button)); currentFilter = button.dataset.filter; renderTasks(); }));
         renderTasks();
     </script>
